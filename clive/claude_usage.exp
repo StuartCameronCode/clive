@@ -1,0 +1,21 @@
+#!/usr/bin/expect -f
+log_user 1
+set timeout 30
+
+spawn /opt/homebrew/bin/claude
+
+expect {
+    -re "trust|proceed" {
+        send "\r"
+        exp_continue
+    }
+    -re "\\$|>" {
+        send "/usage\r"
+    }
+}
+
+# Keep reading output
+expect {
+    -re ".+" { exp_continue }
+    timeout { }
+}
