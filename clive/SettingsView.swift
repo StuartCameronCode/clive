@@ -53,12 +53,30 @@ struct SettingsView: View {
                 .buttonStyle(.link)
                 .font(.caption)
             }
+
+            Spacer()
+
+            HStack {
+                Spacer()
+                Text("Version \(appVersion)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(20)
-        .frame(width: 400, height: 280)
+        .frame(width: 400, height: 300)
         .onAppear {
             isPathValid = FileManager.default.isExecutableFile(atPath: settings.claudePath)
         }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+        #if DEBUG
+        return "\(version)-DEBUG"
+        #else
+        return version
+        #endif
     }
 
     private func selectClaudePath() {
