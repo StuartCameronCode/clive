@@ -213,15 +213,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSettings() {
         if settingsWindow == nil {
             let view = SettingsView()
-            settingsWindow = NSWindow(
+            let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
-            settingsWindow?.title = "Clive Settings"
-            settingsWindow?.contentView = NSHostingView(rootView: view)
-            settingsWindow?.center()
+            window.title = "Clive Settings"
+            window.contentView = NSHostingView(rootView: view)
+            window.center()
+            window.isReleasedWhenClosed = false
+
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                self?.settingsWindow = nil
+            }
+
+            settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
