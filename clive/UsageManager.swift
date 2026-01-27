@@ -235,8 +235,20 @@ class UsageManager {
     }
 
     private func terminateProcess() {
-        if let process = process, process.isRunning {
-            process.terminate()
+        if let proc = process {
+            let pid = proc.processIdentifier
+            if proc.isRunning {
+                // Kill the entire process tree (expect + spawned claude process)
+                // First try to kill child processes, then the parent
+                let killChildren = Process()
+                killChildren.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                killChildren.arguments = ["-9", "-P", String(pid)]
+                try? killChildren.run()
+                killChildren.waitUntilExit()
+
+                // Now kill the expect process itself
+                kill(pid, SIGKILL)
+            }
         }
         process = nil
         outputPipe = nil
