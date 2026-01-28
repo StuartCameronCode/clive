@@ -100,7 +100,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             sessionItem.title = "Session: \(session)"
         }
-        weeklyItem.title = "Weekly: \(weekly)"
+
+        if let resets = currentUsage?.weeklyResets {
+            weeklyItem.title = "Weekly: \(weekly) (resets \(resets))"
+        } else {
+            weeklyItem.title = "Weekly: \(weekly)"
+        }
     }
 
     private func updateMenuBar(with usage: UsageInfo?) {

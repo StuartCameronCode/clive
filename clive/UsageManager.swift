@@ -1,10 +1,12 @@
 import Foundation
 import Combine
+import SwiftTerm
 
 struct UsageInfo {
     let sessionPercent: String?
     let weeklyPercent: String?
     let sessionResets: String?
+    let weeklyResets: String?
 
     var displayString: String {
         let session = sessionPercent ?? "--"
@@ -220,10 +222,16 @@ class UsageManager {
     private func handleRefreshComplete(output: String) {
         terminateProcess()
 
+        // Write raw binary output to file for debugging
+        let debugPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("clive-raw-output.bin")
+        try? output.data(using: .utf8)?.write(to: debugPath)
+
         let usageInfo = parseUsageOutput(output)
         isRefreshing = false
 
         DispatchQueue.main.async { [weak self] in
+            // Store rendered output for debugging
+            SettingsManager.shared.lastRawOutput = renderAnsiOutput(output)
             self?.onUpdate(usageInfo)
         }
     }
@@ -255,35 +263,92 @@ class UsageManager {
     }
 }
 
+/// Stub delegate for SwiftTerm Terminal - we only need to render, not handle events
+private class TerminalRenderer: TerminalDelegate {
+    func send(source: Terminal, data: ArraySlice<UInt8>) {}
+}
+
+/// Renders ANSI escape sequences using SwiftTerm's terminal emulator
+/// SwiftTerm is a VT100/Xterm terminal emulator by Miguel de Icaza (MIT License)
+/// https://github.com/migueldeicaza/SwiftTerm
+func renderAnsiOutput(_ input: String) -> String {
+    let cols = 120
+    let rows = 100
+    let delegate = TerminalRenderer()
+
+    // Create a SwiftTerm terminal instance
+    let terminal = Terminal(delegate: delegate, options: TerminalOptions(cols: cols, rows: rows))
+
+    // Feed the raw ANSI data to the terminal
+    if let data = input.data(using: .utf8) {
+        let bytes = [UInt8](data)
+        terminal.feed(byteArray: bytes)
+    }
+
+    // Extract rendered text from the terminal buffer
+    var lines: [String] = []
+
+    for row in 0..<rows {
+        // getCharData accesses the visible buffer
+        var lineText = ""
+        for col in 0..<cols {
+            if let charData = terminal.getCharData(col: col, row: row) {
+                let str = String(charData.getCharacter())
+                lineText += str.isEmpty ? " " : str
+            } else {
+                lineText += " "
+            }
+        }
+        // Trim trailing spaces
+        lineText = String(lineText.reversed().drop(while: { $0 == " " }).reversed())
+        lines.append(lineText)
+    }
+
+    // Remove trailing empty lines
+    while let last = lines.last, last.isEmpty {
+        lines.removeLast()
+    }
+
+    return lines.joined(separator: "\n")
+}
+
 func parseUsageOutput(_ output: String) -> UsageInfo? {
     guard !output.isEmpty else { return nil }
+
+    // Render ANSI sequences into a proper text buffer
+    let cleanOutput = renderAnsiOutput(output)
 
     var sessionPercent: String?
     var weeklyPercent: String?
     var sessionResets: String?
+    var weeklyResets: String?
 
-    // Find the LAST occurrence of each section to get most recent values
-    if let lastSessionRange = output.range(of: "Current session", options: .backwards) {
-        let afterSession = output[lastSessionRange.upperBound...]
+    // Find "Current session" section
+    if let lastSessionRange = cleanOutput.range(of: "Current session", options: [.backwards, .caseInsensitive]) {
+        let afterSession = cleanOutput[lastSessionRange.upperBound...]
         // Find next section or end
         let endRange = afterSession.range(of: "Current week") ?? afterSession.endIndex..<afterSession.endIndex
         let sessionSection = afterSession[..<endRange.lowerBound]
         if let match = sessionSection.range(of: #"\d+%"#, options: .regularExpression) {
             sessionPercent = String(sessionSection[match])
         }
-        // Extract reset time (e.g., "Resets 3pm (Australia/Melbourne)")
-        if let resetMatch = sessionSection.range(of: #"Resets [^(\n]+"#, options: .regularExpression) {
-            let resetStr = String(sessionSection[resetMatch])
-            // Extract just the time part after "Resets "
-            sessionResets = String(resetStr.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+        // Extract reset time - look for time pattern like "3pm" or "3:00pm"
+        if let resetMatch = sessionSection.range(of: #"\d{1,2}(:\d{2})?[ap]m"#, options: [.regularExpression, .caseInsensitive]) {
+            sessionResets = String(sessionSection[resetMatch])
         }
     }
 
     // Look specifically for "Current week (all models)" to get the combined usage across all models
-    if let allModelsRange = output.range(of: "Current week (all models)", options: .backwards) {
-        let afterAllModels = output[allModelsRange.upperBound...]
+    if let allModelsRange = cleanOutput.range(of: "Current week (all models)", options: .backwards) {
+        let afterAllModels = cleanOutput[allModelsRange.upperBound...]
         if let match = afterAllModels.range(of: #"\d+%"#, options: .regularExpression) {
             weeklyPercent = String(afterAllModels[match])
+        }
+        // Extract weekly reset date (e.g., "Resets Feb 2 at 1:59pm")
+        if let resetMatch = afterAllModels.range(of: #"Resets [^(\n]+"#, options: .regularExpression) {
+            let resetStr = String(afterAllModels[resetMatch])
+            // Extract after "Resets "
+            weeklyResets = String(resetStr.dropFirst(7)).trimmingCharacters(in: .whitespaces)
         }
     }
 
@@ -292,6 +357,7 @@ func parseUsageOutput(_ output: String) -> UsageInfo? {
     return UsageInfo(
         sessionPercent: sessionPercent,
         weeklyPercent: weeklyPercent,
-        sessionResets: sessionResets
+        sessionResets: sessionResets,
+        weeklyResets: weeklyResets
     )
 }

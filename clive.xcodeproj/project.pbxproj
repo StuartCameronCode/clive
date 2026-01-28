@@ -13,7 +13,20 @@
 		A1000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000A /* SettingsView.swift */; };
 		A100000B /* PieChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C /* PieChartView.swift */; };
 		A100000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A100000D /* Assets.xcassets */; };
+		A2000001 /* UsageParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* UsageParserTests.swift */; };
+		A3000001 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A3000002 /* SwiftTerm */; };
+		A3000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A3000004 /* SwiftTerm */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A2000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000030;
+			remoteInfo = clive;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A1000002 /* CliveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CliveApp.swift; sourceTree = "<group>"; };
@@ -24,6 +37,8 @@
 		A100000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A100000C /* PieChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PieChartView.swift; sourceTree = "<group>"; };
 		A100000D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A2000002 /* UsageParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageParserTests.swift; sourceTree = "<group>"; };
+		A2000003 /* cliveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = cliveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -31,6 +46,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A3000001 /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A3000003 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000021 /* clive */,
+				A2000004 /* cliveTests */,
 				A1000022 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -63,8 +88,17 @@
 			isa = PBXGroup;
 			children = (
 				A1000006 /* Clive.app */,
+				A2000003 /* cliveTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A2000004 /* cliveTests */ = {
+			isa = PBXGroup;
+			children = (
+				A2000002 /* UsageParserTests.swift */,
+			);
+			path = cliveTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -83,9 +117,33 @@
 			dependencies = (
 			);
 			name = clive;
+			packageProductDependencies = (
+				A3000002 /* SwiftTerm */,
+			);
 			productName = clive;
 			productReference = A1000006 /* Clive.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A2000030 /* cliveTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A2000040 /* Build configuration list for PBXNativeTarget "cliveTests" */;
+			buildPhases = (
+				A2000031 /* Sources */,
+				A2000020 /* Frameworks */,
+				A2000032 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A2000011 /* PBXTargetDependency */,
+			);
+			name = cliveTests;
+			packageProductDependencies = (
+				A3000004 /* SwiftTerm */,
+			);
+			productName = cliveTests;
+			productReference = A2000003 /* cliveTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -100,6 +158,10 @@
 					A1000030 = {
 						CreatedOnToolsVersion = 15.0;
 					};
+					A2000030 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = A1000030;
+					};
 				};
 			};
 			buildConfigurationList = A1000051 /* Build configuration list for PBXProject "clive" */;
@@ -111,11 +173,15 @@
 				Base,
 			);
 			mainGroup = A1000020;
+			packageReferences = (
+				A3000010 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
 			productRefGroup = A1000022 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				A1000030 /* clive */,
+				A2000030 /* cliveTests */,
 			);
 		};
 /* End PBXProject section */
@@ -126,6 +192,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2000032 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,7 +217,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A2000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A2000001 /* UsageParserTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A2000011 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000030 /* clive */;
+			targetProxy = A2000010 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1000060 /* Debug */ = {
@@ -319,6 +408,38 @@
 			};
 			name = Release;
 		};
+		A2000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.stuart-cameron.cliveTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clive.app/Contents/MacOS/Clive";
+			};
+			name = Debug;
+		};
+		A2000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.stuart-cameron.cliveTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Clive.app/Contents/MacOS/Clive";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -340,7 +461,40 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A2000040 /* Build configuration list for PBXNativeTarget "cliveTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A2000060 /* Debug */,
+				A2000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A3000010 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A3000002 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A3000010 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+		A3000004 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A3000010 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1000050 /* Project object */;
 }

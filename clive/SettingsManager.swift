@@ -53,6 +53,9 @@ class SettingsManager: ObservableObject {
         }
     }
 
+    // In-memory log of last raw Claude output (not persisted)
+    @Published var lastRawOutput: String = ""
+
     init() {
         if let saved = UserDefaults.standard.string(forKey: displayModeKey),
            let mode = DisplayMode(rawValue: saved) {
