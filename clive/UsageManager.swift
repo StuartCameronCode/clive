@@ -33,8 +33,8 @@ class UsageManager {
     private var refreshTimer: Timer?
     private let onUpdate: (UsageInfo?) -> Void
     private let onError: (UsageError?) -> Void
-    private var process: Process?
-    private var outputPipe: Pipe?
+    private var childPid: pid_t = 0
+    private var masterFd: Int32 = -1
     private var timeoutTimer: Timer?
     private var isRefreshing = false
     private var settingsCancellables = Set<AnyCancellable>()
@@ -108,97 +108,194 @@ class UsageManager {
         // Clear any previous error on successful check
         onError(nil)
 
-        let proc = Process()
-        let pipe = Pipe()
-
-        // Create isolated temp directory
+        // Create isolated temp directory for working directory
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("claude-usage-bar")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        proc.currentDirectoryURL = tempDir
 
         // Get directory containing claude for PATH
         let claudeDir = (claudePath as NSString).deletingLastPathComponent
 
-        // Write expect script to temp directory
-        let expectScript = """
-            #!/usr/bin/expect -f
-            log_user 1
-            set timeout 25
-            spawn \(claudePath) /usage
+        // Create a pseudo-terminal
+        let master = posix_openpt(O_RDWR | O_NOCTTY)
+        guard master >= 0 else {
+            isRefreshing = false
+            onError(.launchFailed(error: "Failed to create PTY master"))
+            return
+        }
 
-            # Handle trust dialog if it appears, then read output
-            expect {
-                "trust" {
-                    sleep 0.5
-                    send "\\r"
-                    exp_continue
-                }
-                -re "Current week \\(all models\\).*\\n.*\\d+%" {
-                    # Got the data we need (all models stat)
-                }
-                timeout {
-                    exit 1
-                }
-                eof { }
+        guard grantpt(master) == 0, unlockpt(master) == 0 else {
+            close(master)
+            isRefreshing = false
+            onError(.launchFailed(error: "Failed to configure PTY"))
+            return
+        }
+
+        guard let slavePathPtr = ptsname(master) else {
+            close(master)
+            isRefreshing = false
+            onError(.launchFailed(error: "Failed to get PTY slave path"))
+            return
+        }
+
+        let slavePathStr = String(cString: slavePathPtr)
+        let slave = open(slavePathStr, O_RDWR)
+        guard slave >= 0 else {
+            close(master)
+            isRefreshing = false
+            onError(.launchFailed(error: "Failed to open PTY slave"))
+            return
+        }
+
+        // Set terminal size on master
+        var winSize = winsize(ws_row: 100, ws_col: 120, ws_xpixel: 0, ws_ypixel: 0)
+        _ = ioctl(master, TIOCSWINSZ, &winSize)
+
+        self.masterFd = master
+
+        // Set up posix_spawn file actions to redirect stdin/stdout/stderr to PTY slave
+        var fileActions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&fileActions)
+        posix_spawn_file_actions_adddup2(&fileActions, slave, STDIN_FILENO)
+        posix_spawn_file_actions_adddup2(&fileActions, slave, STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&fileActions, slave, STDERR_FILENO)
+        posix_spawn_file_actions_addclose(&fileActions, master)
+        if slave > STDERR_FILENO {
+            posix_spawn_file_actions_addclose(&fileActions, slave)
+        }
+
+        // Set up spawn attributes
+        var spawnAttr: posix_spawnattr_t?
+        posix_spawnattr_init(&spawnAttr)
+
+        // Set working directory via file actions (chdir)
+        posix_spawn_file_actions_addchdir_np(&fileActions, tempDir.path)
+
+        // Build environment - use dumb terminal and no color for simpler output
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? ""
+        let user = ProcessInfo.processInfo.environment["USER"] ?? ""
+        let envVars: [String] = [
+            "PATH=\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+            "HOME=\(home)",
+            "USER=\(user)",
+            "TERM=dumb",
+            "NO_COLOR=1"
+        ]
+
+        // Build arguments (argv[0] should be program name)
+        let args: [String] = ["claude", "/usage"]
+
+        // Spawn the process using proper C string handling
+        var pid: pid_t = 0
+        var spawnResult: Int32 = -1
+
+        // Convert strings to C strings and call posix_spawn
+        let cArgs = args.map { strdup($0) } + [nil]
+        let cEnv = envVars.map { strdup($0) } + [nil]
+
+        defer {
+            cArgs.forEach { if let p = $0 { free(p) } }
+            cEnv.forEach { if let p = $0 { free(p) } }
+            posix_spawn_file_actions_destroy(&fileActions)
+            posix_spawnattr_destroy(&spawnAttr)
+        }
+
+        spawnResult = cArgs.withUnsafeBufferPointer { argvBuf in
+            cEnv.withUnsafeBufferPointer { envpBuf in
+                posix_spawn(
+                    &pid,
+                    claudePath,
+                    &fileActions,
+                    &spawnAttr,
+                    UnsafeMutablePointer(mutating: argvBuf.baseAddress!),
+                    UnsafeMutablePointer(mutating: envpBuf.baseAddress!)
+                )
             }
+        }
 
-            # Give it a moment to finish output
-            sleep 1
-            """
-        let scriptPath = tempDir.appendingPathComponent("claude_usage.exp")
-        try? FileManager.default.removeItem(at: scriptPath)
-        try? expectScript.write(to: scriptPath, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+        // Close slave in parent - child has its own copy
+        close(slave)
 
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/expect")
-        proc.arguments = ["-f", scriptPath.path]
-        proc.standardOutput = pipe
-        proc.standardError = pipe
+        guard spawnResult == 0 else {
+            close(master)
+            masterFd = -1
+            isRefreshing = false
+            onError(.launchFailed(error: "posix_spawn failed with error \(spawnResult)"))
+            return
+        }
 
-        // Minimal environment - include claude's directory in PATH
-        var env: [String: String] = [:]
-        env["PATH"] = "\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        env["HOME"] = ProcessInfo.processInfo.environment["HOME"] ?? ""
-        env["USER"] = ProcessInfo.processInfo.environment["USER"] ?? ""
-        env["TERM"] = "dumb"
-        env["NO_COLOR"] = "1"
-        proc.environment = env
+        self.childPid = pid
 
-        self.process = proc
-        self.outputPipe = pipe
-
-        var accumulatedOutput = ""
+        var accumulatedData = Data()
         var hasCompleted = false
+        var hasSentTrustResponse = false
 
-        // Set up async reading of output
-        let fileHandle = pipe.fileHandleForReading
-        fileHandle.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            if !data.isEmpty {
-                if let str = String(data: data, encoding: .utf8) {
-                    accumulatedOutput += str
+        // Set master to non-blocking mode
+        let flags = fcntl(master, F_GETFL)
+        _ = fcntl(master, F_SETFL, flags | O_NONBLOCK)
 
-                    // Check if we have complete data - terminate early if so
-                    if !hasCompleted, let usage = parseUsageOutput(accumulatedOutput),
-                       usage.sessionPercent != nil && usage.weeklyPercent != nil {
-                        hasCompleted = true
-                        DispatchQueue.main.async {
-                            fileHandle.readabilityHandler = nil
-                            self?.timeoutTimer?.invalidate()
-                            self?.timeoutTimer = nil
-                            self?.handleRefreshComplete(output: accumulatedOutput)
-                        }
+        // Create a dispatch source to read from the PTY master
+        let readSource = DispatchSource.makeReadSource(fileDescriptor: master, queue: .global(qos: .userInitiated))
+
+        readSource.setEventHandler { [weak self] in
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            let bytesRead = read(master, &buffer, buffer.count)
+
+            if bytesRead > 0 {
+                accumulatedData.append(contentsOf: buffer[0..<bytesRead])
+                let accumulatedOutput = String(data: accumulatedData, encoding: .utf8) ?? ""
+
+                // Check for trust dialog and auto-respond
+                if !hasSentTrustResponse {
+                    let rendered = renderAnsiOutput(accumulatedOutput)
+                    if rendered.lowercased().contains("trust") || rendered.lowercased().contains("proceed") {
+                        hasSentTrustResponse = true
+                        var newline: [UInt8] = [0x0D] // CR
+                        _ = write(master, &newline, 1)
+                    }
+                }
+
+                // Check if we have complete data
+                if !hasCompleted, let usage = parseUsageOutput(accumulatedOutput),
+                   usage.sessionPercent != nil && usage.weeklyPercent != nil {
+                    hasCompleted = true
+                    DispatchQueue.main.async {
+                        readSource.cancel()
+                        self?.timeoutTimer?.invalidate()
+                        self?.timeoutTimer = nil
+                        self?.handleRefreshComplete(output: accumulatedOutput)
+                    }
+                }
+            } else if bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                // EOF or error
+                if !hasCompleted {
+                    hasCompleted = true
+                    let accumulatedOutput = String(data: accumulatedData, encoding: .utf8) ?? ""
+                    DispatchQueue.main.async {
+                        readSource.cancel()
+                        self?.timeoutTimer?.invalidate()
+                        self?.timeoutTimer = nil
+                        self?.handleRefreshComplete(output: accumulatedOutput)
                     }
                 }
             }
         }
 
-        // Handle process termination (fallback if early completion didn't trigger)
-        proc.terminationHandler = { [weak self] _ in
+        readSource.setCancelHandler {
+            // Cleanup handled in terminateProcess
+        }
+
+        readSource.resume()
+
+        // Monitor child process exit
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var status: Int32 = 0
+            _ = waitpid(pid, &status, 0)
+
             DispatchQueue.main.async {
                 guard !hasCompleted else { return }
                 hasCompleted = true
-                fileHandle.readabilityHandler = nil
+                let accumulatedOutput = String(data: accumulatedData, encoding: .utf8) ?? ""
+                readSource.cancel()
                 self?.timeoutTimer?.invalidate()
                 self?.timeoutTimer = nil
                 self?.handleRefreshComplete(output: accumulatedOutput)
@@ -208,14 +305,11 @@ class UsageManager {
         // Set timeout
         timeoutTimer?.invalidate()
         timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+            if !hasCompleted {
+                hasCompleted = true
+                readSource.cancel()
+            }
             self?.handleTimeout()
-        }
-
-        do {
-            try proc.run()
-        } catch {
-            isRefreshing = false
-            onError(.launchFailed(error: error.localizedDescription))
         }
     }
 
@@ -243,23 +337,23 @@ class UsageManager {
     }
 
     private func terminateProcess() {
-        if let proc = process {
-            let pid = proc.processIdentifier
-            if proc.isRunning {
-                // Kill the entire process tree (expect + spawned claude process)
-                // First try to kill child processes, then the parent
-                let killChildren = Process()
-                killChildren.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-                killChildren.arguments = ["-9", "-P", String(pid)]
-                try? killChildren.run()
-                killChildren.waitUntilExit()
+        if childPid > 0 {
+            // Kill child process and any descendants
+            let killChildren = Process()
+            killChildren.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            killChildren.arguments = ["-9", "-P", String(childPid)]
+            try? killChildren.run()
+            killChildren.waitUntilExit()
 
-                // Now kill the expect process itself
-                kill(pid, SIGKILL)
-            }
+            // Kill the main process
+            kill(childPid, SIGKILL)
+            childPid = 0
         }
-        process = nil
-        outputPipe = nil
+
+        if masterFd >= 0 {
+            close(masterFd)
+            masterFd = -1
+        }
     }
 }
 
@@ -293,8 +387,14 @@ func renderAnsiOutput(_ input: String) -> String {
         var lineText = ""
         for col in 0..<cols {
             if let charData = terminal.getCharData(col: col, row: row) {
-                let str = String(charData.getCharacter())
-                lineText += str.isEmpty ? " " : str
+                let char = charData.getCharacter()
+                // Filter out null characters and replace with space
+                if char == "\0" || char.asciiValue == 0 {
+                    lineText += " "
+                } else {
+                    let str = String(char)
+                    lineText += str.isEmpty ? " " : str
+                }
             } else {
                 lineText += " "
             }
