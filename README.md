@@ -32,22 +32,7 @@ Honestly, I vibe coded this thing in the space of an hour. It works for me, hope
 
 ## Installation
 
-Clive is just a hobby project and the releases are unsigned. You've got two options:
-
-### 1. Gatekeeper bypass
-1. Download the release .zip and unzip it.
-2. Try to open the app - You'll get a dialog saying it "cannot be opened because it is from an unidentified developer"
-3. Open System Settings → Privacy & Security
-4. Scroll down to the "Security" section - You should see a message like:
-5. "Clive" was blocked from use because it is not from an identified developer. Click "Open Anyway"
-6. Enter your password or use Touch ID to confirm
-7. Click "Open" in the final confirmation dialog
-
-### 2. Built it in Xcode yourself
-1. Clone this repository
-2. Open `clive.xcodeproj` in Xcode
-3. Build and run (⌘R)
-4. Optionally, add to Login Items for auto-start
+Just extrat the app and drag & drop to your Applications folder.
 
 ## Usage
 
