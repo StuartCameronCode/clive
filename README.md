@@ -34,6 +34,28 @@ Honestly, I vibe coded this thing in the space of an hour. It works for me, hope
 
 Just extrat the app and drag & drop to your Applications folder.
 
+### 3. Install via Homebrew
+```bash
+brew install https://raw.githubusercontent.com/StuartCameronCode/clive/main/HomebrewFormula/clive.rb
+```
+
+After installation, you can open Clive with:
+```bash
+open $(brew --prefix)/Clive.app
+```
+
+Or create a symlink to Applications:
+```bash
+ln -s $(brew --prefix)/Clive.app /Applications/Clive.app
+```
+
+To upgrade to a newer version:
+```bash
+brew upgrade clive
+```
+
+> **Note:** Once you create the symlink, it automatically points to the latest version after upgrades—no need to recreate it.
+
 ## Usage
 
 Once running, Clive appears in your menu bar showing your Claude Code usage. Click the icon to see:
